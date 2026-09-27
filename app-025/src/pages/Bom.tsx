@@ -35,6 +35,9 @@ export default function Bom({ plan }: { plan: Plan }) {
         <Link to={`/plan/${plan.id}/stocking`} className="tab">
           生物兼容
         </Link>
+        <Link to={`/plan/${plan.id}/schedule`} className="tab">
+          开缸日程
+        </Link>
         <span className="tab active">物料清单</span>
       </nav>
       <h1>物料清单与养护参数卡（{plan.name}）</h1>

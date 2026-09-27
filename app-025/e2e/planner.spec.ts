@@ -167,6 +167,46 @@ test.describe('水族造景规划器 E2E', () => {
     expect(count).toBeLessThan(26);
   });
 
+  test('开缸日程：裸缸 8 周表、超范围提醒、勾选持久化、改缸后未来周重排', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('new-plan-name').fill('E2E裸缸日程');
+    await page.getByTestId('create-plan').click();
+    await expect(page.getByTestId('editor')).toBeVisible();
+
+    // 无植物 → 日程应为「裸缸」节奏
+    await page.getByRole('link', { name: '开缸日程' }).first().click();
+    await expect(page.getByTestId('schedule-page')).toBeVisible();
+    await expect(page.getByTestId('schedule-summary')).toContainText('裸缸');
+
+    // 8 个周块；裸缸无 CO₂ 行；首批鱼排在第 6 周
+    await expect(page.locator('tr.week-head')).toHaveCount(8);
+    await expect(page.locator('[data-testid^="task-row-"][data-testid$="-co2"]')).toHaveCount(0);
+    await expect(page.getByTestId('task-row-5-first-fish')).toContainText('第一批鱼');
+
+    // 第 1 周（裸缸 + 默认泥）pH 合理下限 5.8：输入 5.4 → 超范围提醒
+    await page.getByTestId('ph-input-0').fill('5.4');
+    await page.getByTestId('ph-input-0').blur();
+    await expect(page.getByTestId('reading-alert-0').first()).toContainText('已超出');
+    // 改回合理值 → 警告消失
+    await page.getByTestId('ph-input-0').fill('6.8');
+    await page.getByTestId('ph-input-0').blur();
+    await expect(page.locator('[data-testid="reading-alert-0"]')).toHaveCount(0);
+
+    // 勾选第 1 周换水 → 刷新后仍勾选（localStorage 持久化）
+    await page.getByTestId('check-0-water-change').check();
+    await page.reload();
+    await expect(page.getByTestId('schedule-page')).toBeVisible();
+    await expect(page.getByTestId('check-0-water-change')).toBeChecked();
+
+    // 中途改缸体尺寸：未来周（当周之后）重排，已过去周不变（当周为第 1 周，全部重算但记录保留）
+    await page.getByRole('link', { name: '造景编辑' }).first().click();
+    await page.getByTestId('tank-l').fill('120');
+    await page.getByRole('link', { name: '开缸日程' }).first().click();
+    await expect(page.getByTestId('check-0-water-change')).toBeChecked();
+    // 记录的 pH 读数仍在
+    await expect(page.getByTestId('ph-input-0')).toHaveValue('6.8');
+  });
+
   test('healthz 由 nginx 提供（Docker 场景断言，preview 下跳过）', async ({ page, baseURL }) => {
     test.skip(!baseURL!.includes(':8105'), '仅在 Docker 容器场景运行');
     const res = await page.request.get('/healthz');

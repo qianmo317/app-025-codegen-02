@@ -59,6 +59,9 @@ export default function PlanList() {
                 <Link to={`/plan/${p.id}/water`}>
                   <button className="btn">水质</button>
                 </Link>
+                <Link to={`/plan/${p.id}/schedule`}>
+                  <button className="btn">日程</button>
+                </Link>
                 <Link to={`/plan/${p.id}/stocking`}>
                   <button className="btn">生物</button>
                 </Link>

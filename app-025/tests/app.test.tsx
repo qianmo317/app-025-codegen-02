@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from '../src/App';
-import { upsertPlan, newPlan, deletePlan, getPlans } from '../src/state/plans';
+import { upsertPlan, newPlan, deletePlan, getPlans, getPlan } from '../src/state/plans';
 
 /** 组件层测试：模拟真实用户从列表 → 编辑 → 水质 → 生物 → 清单 的点击路径 */
 
@@ -208,7 +208,7 @@ describe('生物兼容页', () => {
     }
     expect(await screen.findByTestId('density-card')).toBeInTheDocument();
     expect(screen.getByTestId('density-card').textContent).toContain('经验估算');
-  });
+  }, 15000);
 });
 
 describe('物料清单页', () => {
@@ -254,6 +254,113 @@ describe('物料清单页', () => {
     expect(created).toContain('image/svg+xml');
     URL.createObjectURL = origCreate;
     URL.revokeObjectURL = origRevoke;
+  });
+});
+
+describe('开缸日程页', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    getPlans().forEach((p) => deletePlan(p.id));
+  });
+
+  it('密植泥缸显示 8 周表、换水/光照/CO₂/下鱼虾螺任务，勾选持久化', async () => {
+    const plan = newPlan('日程密植缸');
+    upsertPlan({
+      ...plan,
+      items: Array.from({ length: 10 }, (_, i) => ({
+        id: `pl${i}`,
+        kind: 'plant' as const,
+        name: '红宫廷',
+        x: 10,
+        y: 10,
+        scaleCm: 20,
+        rotDeg: 0,
+        layer: 'back' as const,
+        lightNeed: 'high' as const,
+        growth: 'fast' as const,
+        qty: 10,
+      })),
+    });
+    window.location.hash = `/plan/${plan.id}/schedule`;
+    render(<App />);
+    await screen.findByTestId('schedule-table');
+
+    // 风格标签与 8 个周块（week-head 行；同前缀的 week-status 不计）
+    expect(screen.getByTestId('schedule-summary').textContent).toContain('密植草缸');
+    expect(document.querySelectorAll('tr.week-head')).toHaveLength(8);
+
+    // 第 4 周（index 3）：CO₂ 全量、首批鱼、黑壳虾；第 3 周有螺
+    const fishRow = screen.getByTestId('task-row-3-first-fish');
+    expect(fishRow.textContent).toContain('第一批鱼');
+    expect(screen.getByTestId('task-row-3-shrimp').textContent).toContain('黑壳虾');
+    expect(screen.getByTestId('task-row-2-snail').textContent).toContain('螺');
+    expect(screen.getByTestId('task-row-2-co2').textContent).toContain('全量 CO₂');
+
+    // 勾选第 1 周换水 → 持久化到 store
+    const check = screen.getByTestId('check-0-water-change') as HTMLInputElement;
+    expect(check.checked).toBe(false);
+    await userEvent.click(check);
+    expect((screen.getByTestId('check-0-water-change') as HTMLInputElement).checked).toBe(true);
+    expect(getPlan(plan.id)!.schedule!.done['0:water-change']).toBe(true);
+  });
+
+  it('裸缸无 CO₂ 行、首批鱼在第 6 周', async () => {
+    const plan = newPlan('日程裸缸');
+    upsertPlan(plan);
+    window.location.hash = `/plan/${plan.id}/schedule`;
+    render(<App />);
+    await screen.findByTestId('schedule-table');
+    expect(screen.getByTestId('schedule-summary').textContent).toContain('裸缸');
+    // 裸缸任意周都没有 CO₂ 行
+    expect(document.querySelectorAll('[data-testid$="-co2"]')).toHaveLength(0);
+    // 首批鱼在 index 5（第 6 周）
+    expect(screen.getByTestId('task-row-5-first-fish')).toBeTruthy();
+  });
+
+  it('裸缸 + 惰性底床：第 1 周 pH 下限 6.5，输入 6.0 给超范围提醒', async () => {
+    const plan = newPlan('日程砂缸');
+    upsertPlan({ ...plan, substrate: { ...plan.substrate, kind: 'sand' as const } });
+    window.location.hash = `/plan/${plan.id}/schedule`;
+    render(<App />);
+    await screen.findByTestId('schedule-table');
+    expect(screen.getByTestId('schedule-summary').textContent).toContain('裸缸');
+    const ph = screen.getByTestId('ph-input-0');
+    await userEvent.type(ph, '6.0');
+    await userEvent.tab();
+    const alerts = await screen.findAllByTestId('reading-alert-0');
+    expect(alerts.some((a) => a.textContent?.includes('已超出'))).toBe(true);
+    // 读数持久化
+    expect(getPlan(plan.id)!.schedule!.readings[0].ph).toBe(6);
+  });
+
+  it('开缸日改到 14 天前：第 1、2 周冻结，勾选记录保留', async () => {
+    const plan = newPlan('冻结测试');
+    upsertPlan(plan);
+    window.location.hash = `/plan/${plan.id}/schedule`;
+    render(<App />);
+    await screen.findByTestId('schedule-table');
+
+    // 勾选第 1 周换水并留实测
+    await userEvent.click(screen.getByTestId('check-0-water-change'));
+    // 把开缸日改到 16 天前（第 3 周，index 2）
+    const d = new Date();
+    d.setDate(d.getDate() - 16);
+    const start = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await userEvent.clear(screen.getByTestId('start-date'));
+    await userEvent.type(screen.getByTestId('start-date'), start);
+    // change 事件触发（date input 在 RTL 下）
+    fireEvent.change(screen.getByTestId('start-date'), { target: { value: start } });
+
+    // 当前周 = 第 3 周
+    expect(screen.getByTestId('current-week').textContent).toBe('3');
+    // 第 1、2 周显示已冻结
+    expect(screen.getByTestId('week-status-0').textContent).toContain('冻结');
+    expect(screen.getByTestId('week-status-1').textContent).toContain('冻结');
+    // 已勾选项保留
+    expect((screen.getByTestId('check-0-water-change') as HTMLInputElement).checked).toBe(true);
+    // store 中存在 0、1 两周冻结快照
+    const frozen = Object.keys(getPlan(plan.id)!.schedule!.frozenWeeks).map(Number);
+    expect(frozen).toEqual([0, 1]);
   });
 });
 

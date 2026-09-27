@@ -12,6 +12,7 @@ import {
 import PlanList from './pages/PlanList';
 import Editor from './pages/Editor';
 import Water from './pages/Water';
+import Schedule from './pages/Schedule';
 import Stocking from './pages/Stocking';
 import Bom from './pages/Bom';
 import Library from './pages/Library';
@@ -37,6 +38,11 @@ export default function App() {
     case 'water': {
       const plan = getPlan(route.id);
       page = plan ? <Water plan={plan} /> : <NotFound />;
+      break;
+    }
+    case 'schedule': {
+      const plan = getPlan(route.id);
+      page = plan ? <Schedule plan={plan} /> : <NotFound />;
       break;
     }
     case 'stocking': {

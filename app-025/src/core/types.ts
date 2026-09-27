@@ -65,7 +65,37 @@ export type Plan = {
   items: Item[];
   fishes: { fishId: string; count: number }[];
   water: WaterConfig;
+  schedule?: ScheduleState;
   updatedAt: number;
+};
+
+/**
+ * 开缸日程（前 8 周：开缸 → 稳定期）。
+ * 已过去的周以快照形式冻结在 frozenWeeks 中：
+ * 中途修改缸体尺寸/水草数量，只重排当周及以后，已过去的周不动。
+ */
+export type ScheduleState = {
+  /** 开缸日（当地时间 yyyy-mm-dd），决定第几周 */
+  startedOn: string;
+  /** 已勾选项：key = `${weekIndex}:${taskId}` */
+  done: Record<string, boolean>;
+  /** 每周实测值（pH / 氨氮 NH3-N mg/L） */
+  readings: Record<number, ScheduleReading>;
+  /** 已冻结的历史周快照（weekIndex → 当时参数下生成的周表） */
+  frozenWeeks: Record<number, FrozenWeek>;
+};
+
+export type ScheduleReading = {
+  ph?: number;
+  ammonia?: number; // 总氨氮 NH3-N mg/L
+  recordedOn?: string;
+};
+
+export type FrozenWeek = {
+  /** 冻结那一刻的参数签名（style/pace/soil/有效水量/鱼/CO₂ 目标） */
+  signature: string;
+  week: import('./schedule').ScheduleWeek;
+  frozenAt: number;
 };
 
 export const EMPTY_WATER: WaterConfig = {

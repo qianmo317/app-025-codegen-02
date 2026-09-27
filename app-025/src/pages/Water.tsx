@@ -51,6 +51,9 @@ export default function Water({ plan }: { plan: Plan }) {
           ← 造景编辑
         </Link>
         <span className="tab active">水质与设备</span>
+        <Link to={`/plan/${plan.id}/schedule`} className="tab">
+          开缸日程
+        </Link>
         <Link to={`/plan/${plan.id}/stocking`} className="tab">
           生物兼容 →
         </Link>

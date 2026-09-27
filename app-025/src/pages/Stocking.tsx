@@ -58,6 +58,9 @@ export default function Stocking({ plan }: { plan: Plan }) {
         <Link to={`/plan/${plan.id}/water`} className="tab">
           水质与设备
         </Link>
+        <Link to={`/plan/${plan.id}/schedule`} className="tab">
+          开缸日程
+        </Link>
         <span className="tab active">生物兼容</span>
         <Link to={`/plan/${plan.id}/bom`} className="tab">
           物料清单 →

@@ -86,6 +86,9 @@ export default function Editor({ plan }: { plan: Plan }) {
           <Link to={`/plan/${plan.id}/water`} className="tab">
             水质与设备
           </Link>
+          <Link to={`/plan/${plan.id}/schedule`} className="tab">
+            开缸日程
+          </Link>
           <Link to={`/plan/${plan.id}/stocking`} className="tab">
             生物兼容
           </Link>

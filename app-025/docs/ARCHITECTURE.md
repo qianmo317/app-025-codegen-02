@@ -16,7 +16,7 @@
 │  #/ /plan/:id[/water|/stocking|/bom] /library
 ├─────────────────────────────────────────────────────────────┤
 │  核心计算层 core/（纯函数，"后端"逻辑，全部可单测）
-│  volume.ts · water.ts · equipment.ts · compatibility.ts · bom.ts · types.ts
+│  volume.ts · water.ts · equipment.ts · compatibility.ts · bom.ts · schedule.ts · types.ts
 ├─────────────────────────────────────────────────────────────┤
 │  状态层 state/plans.ts（集中式 store，观察者模式）
 │  方案 CRUD + localStorage 持久化（键 aquaplans.v1）
@@ -64,6 +64,7 @@ App.tsx: useSyncExternalStore(subscribePlans, getPlans) ──▶ 触发重渲�
 | `{ name: 'home' }` | PlanList |
 | `{ name: 'editor', id }` | Editor |
 | `{ name: 'water', id }` | Water |
+| `{ name: 'schedule', id }` | Schedule |
 | `{ name: 'stocking', id }` | Stocking |
 | `{ name: 'bom', id }` | Bom |
 | `{ name: 'library' }` | Library |
@@ -89,6 +90,7 @@ App.tsx: useSyncExternalStore(subscribePlans, getPlans) ──▶ 触发重渲�
 | equipment.ts | `classifyLightByLumen` `recommendLumens` `recommendWatts` `checkLight` `filterFlowLph` `heaterWatts` `suggestGlassMm` `equipmentSummary` | 光照三档判定 + 水草需求交叉校验；过滤 5~8 倍；加热 W = L×ΔT×0.12 |
 | compatibility.ts | `rangesOverlap` `checkPair` `checkSchooling` `checkTankSize` `checkDensity` `checkStocking` | 逐对 5 条规则 + 附加规则，输出 `StockingIssue[]`（severity/conflict·warning·info + code + message） |
 | bom.ts | `buildBom` | 汇总底砂/水草/硬景观/生物/设备行 + 养护参数卡 |
+| schedule.ts | `deriveScheduleParams` `buildSchedule` `evaluateReading` `gateBlocked` `materializeSchedule` `weeksToFreeze` `currentWeekIndex` `scheduleProgress` | 开缸 8 周日程：按水量/快慢生/水草泥/密植-裸缸推导换水·光照·CO₂·下鱼虾螺节奏；每周 pH/氨氮合理范围；历史周冻结快照，参数变更只重排当周及以后 |
 
 可配参数集中以常量或数据表存在（`GH_SALTS`、`LIGHT_LUMEN_PER_M2`、`WL_RANGE`、底砂密度表、硬景观排水系数），便于调参与测试边界。
 
@@ -119,3 +121,4 @@ App.tsx: useSyncExternalStore(subscribePlans, getPlans) ──▶ 触发重渲�
 | 有效水量强制扣除底砂与素材 | 商家/新手按毛水量配药施肥剂量偏高的真实痛点，验收明确要求专门用例 |
 | 估算类输出统一 `Estimate` 类型 | 水族经验值差异大，必须让用户知道哪些是精确公式、哪些需要实测校验（如 CO₂ 用监测液） |
 | 素材画布 SVG 而非 Canvas 2D | 素材数量级小（几十个节点），SVG 可直接绑定 DOM 事件（拖拽/选中），无需手写命中检测，且导出平面图可复用同一坐标模型 |
+| 日程历史周用快照冻结，而非只记参数版本 | 需求明确：中途改缸体/水草数量后「后面几周重排，但不打乱已经过去的周」。纯函数每次按当前参数生成全表，state 层只冻结已滑过的周（`weeksToFreeze`/`materializeSchedule`），勾选/实测仍以稳定 key（`周:任务id`）挂在冻结或新生成的周上 |
