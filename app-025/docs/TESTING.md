@@ -2,16 +2,16 @@
 
 ## 1. 测试策略总览
 
-三层测试金字塔，全部实测通过：
+三层测试金字塔（单元 + 组件已实测全绿；E2E 用例齐备，需有浏览器系统库的环境运行）：
 
 | 层级 | 框架 | 数量 | 目标 |
 |---|---|---|---|
-| 单元测试 | Vitest + jsdom | 139（含组件 16） | `core/` 纯函数正确性，验收用例全覆盖 |
-| 组件交互测试 | Testing Library + user-event | 16（含在 139 内） | 用户点击路径：新建→编辑→水质→兼容→清单→导出 |
-| E2E | Playwright（Chromium） | preview 3/3 + 容器 4/4 | 构建产物/容器上的全链路验收 |
+| 单元测试 | Vitest + jsdom | 166（含组件 22） | `core/` 纯函数正确性，验收用例全覆盖 |
+| 组件交互测试 | Testing Library + user-event | 22（含在 166 内） | 用户点击路径：新建→编辑→水质→兼容→日程→清单→导出 |
+| E2E | Playwright（Chromium） | preview 4 用例 + 容器 5 用例 | 构建产物/容器上的全链路验收 |
 
 ```bash
-npm test                  # 单元 + 组件（~秒级）
+npm test                  # 单元 + 组件（~秒级，166 用例）
 npm run e2e               # E2E（自动起 vite preview，约 1 分钟）
 E2E_BASE_URL=http://localhost:8105 E2E_NO_SERVER=1 npm run e2e   # 针对容器
 ```
@@ -54,7 +54,16 @@ E2E_BASE_URL=http://localhost:8105 E2E_NO_SERVER=1 npm run e2e   # 针对容器
 
 底砂行 kg 与重量公式一致；水草按株数；生物按尾数；硬景观+三设备（过滤 L/h、灯 lm/W、加热 W）齐备；养护卡四要素（换水/喂食/光照/CO₂ 日程）。
 
-## 3. 组件测试（tests/app.test.tsx，16 用例）
+### tests/schedule.test.ts —— 开缸日程（21 用例）
+
+- **画像推导**：soil/ada 判泥、沙砾判非泥；密度三档（0 株裸缸 / 10 株疏植 / 50 株密植，83.7L 缸）；高光草 → needsCo2；快慢生草株数与占比；
+- **节奏分档**：总周数（裸缸 6 / 泥缸 6 / 密植速生无泥 4 / 疏植无泥 5）；泥缸前两周 50%×3→50%×2、非泥 30%×2、裸缸 25%×1；小缸（<40L）前两周次数 +1；光照首周 4h 逐周 +1h、慢生上限 6h/密植速生 8h、裸缸 0；CO₂ 密植第 1 周起步/疏植第 2 周/无高光草不排程；下鱼 密植速生 3/常规 4/裸缸 5/小缸 +1；虾螺在鱼后且泥缸 ≥5；氨氮上限 1.0/0.5/0.25、下鱼后 0.05；pH 前两周放宽、泥缸下限更低；
+- **整表结构**：每步理由与现象非空、步骤 id 全表唯一、里程碑（下鱼/虾螺）各恰好一次且在对应周、裸缸无光照/CO₂ 步骤；
+- **日期推算**：currentWeek 满 7 天进一周、未来/非法日期兜底第 1 周；weekDateRange 跨年跨月格式；
+- **重排锁定**：mergeWithLocked 过去周用快照、未来周用新参数；weeksToLock 只补未锁定的过去周；
+- **实测校验**：pH 越界 warn（低于/高于）、氨氮超上限 warn 提示换水、超 2 倍 danger 提示立即换水 50%。
+
+## 3. 组件测试（tests/app.test.tsx 16 用例 + tests/startup.test.tsx 6 用例）
 
 | 分组 | 验证点 |
 |---|---|
@@ -64,12 +73,14 @@ E2E_BASE_URL=http://localhost:8105 E2E_NO_SERVER=1 npm run e2e   # 针对容器
 | 兼容页 | 斗鱼+3 尾红绿灯 → aggression+schooling（应激）双检出；金鱼+七彩 → 水温硬冲突；40L 缸 30 尾灯鱼 → 密度卡出现且含"经验估算" |
 | 清单页 | 底砂 kg/株数/尾数/三设备齐备+养护卡；SVG 导出触发 Blob 下载（stub `URL.createObjectURL`） |
 | 素材库 | 四 tab 切换、搜索过滤（"灯鱼"）行数收窄 |
+| 开缸日程页 | 默认方案 6 周表渲染（换水/光照/CO₂/生物列+理由现象）；勾选步骤持久化（重挂载仍在）；氨氮超 2 倍出危险提醒、pH 越界提醒、范围内正常；开缸 8 天后改缸长 60→120：第 1 周锁定不变、第 2 周起重排（换水升数 41.8→83.7L）；里程碑勾选跨重排保留、改底床周数 6→4；改开缸日期推进当前周并出现锁定标记 |
 
 ## 4. E2E（e2e/planner.spec.ts）
 
 - **主流程**（验收原文路径）：设缸体（90×45×45，水面 390mm，ADA 泥 50+60mm）→ 摆 2 硬景观+2 水草 → 选中沉木改尺寸/旋转 → 鼠标拖拽青龙石 → 断言毛水量 158L 且有效<毛 → 侧视图切换 → 水质页断言 RO 方案/泡数>0/目标 pH∈(6.5,7.0)/过滤区间/加热 W/高光草警告 → 兼容页加入斗鱼+3 红绿灯+金鱼+七彩 → 断言 temp 硬冲突/aggression/应激/密度卡 → 清单页断言 kg/株/尾/三设备/养护卡 → 触发 SVG 下载并校验文件名。
 - **持久化**：新建方案 → reload 仍在 → 回列表可见 → 删除（自动接受 confirm 对话框）。
 - **素材库**：tab 切换与搜索过滤。
+- **开缸日程**：新建 → 导航到日程页 → 6 周表与里程碑列 → 勾选步骤 → 录氨氮 2.5（超第 1 周上限 1.0 的 2 倍）出危险提醒、pH 6.8 在范围内出正常提示 → 刷新后勾选与实测值仍在。
 - **healthz**：仅当 `baseURL` 含 `:8105`（Docker 场景）运行，否则自动 skip。
 
 两种运行模式（playwright.config.ts）：
@@ -89,12 +100,14 @@ E2E_BASE_URL=http://localhost:8105 E2E_NO_SERVER=1 npm run e2e
 |---|---|
 | Node 26 全局无 localStorage（jsdom 下同样缺失） | `tests/setup.ts` 注入内存 polyfill（同名字段/方法），并 afterEach 清理 |
 | jsdom 不支持 PointerEvent，user-event 的 click 不触发 onPointerDown | 画布素材 `<g>` 上同时挂 `onPointerDown`（拖拽）与 `onClick`（选中兜底），两边环境都可交互 |
+| 容器缺浏览器系统库（libnspr4 等）时 E2E 无法启动 Chromium | 在可 `npx playwright install-deps` 的环境运行 E2E；单元/组件层不依赖浏览器，不受影响 |
+| 同一组件测试内多次 `render` 会累积 DOM（cleanup 只在用例间执行） | 重挂载场景用第一次 `render` 返回的 `unmount()` 先卸载（见 tests/startup.test.tsx 勾选持久化用例） |
 | `item-` 前缀被右侧面板输入（item-scale 等）占用，E2E 定位画布元素用 `[data-testid^="item-i"]`（素材 id 以 `i` 开头） | 定位约定见下节 |
 | 素材形状相互覆盖时 Playwright 可动性检查失败 | 测试中对该点击使用 `force: true`；App 侧渲染已按 后→中→前 排序降低覆盖概率 |
 
 ## 6. 测试基建约定
 
-1. **data-testid 前缀规划**：页面容器 `*-page`、卡片 `card-*`、交互按钮 `add-plant-*/add-hardscape-*/add-fish/inc-*/dec-*`、结果区 `ro-result/salt-result/bps/target-ph/light-warnings/issue-*/density-card/care-card`、画布元素 `item-{id}`。新页面照此命名，E2E 才能稳定定位。
+1. **data-testid 前缀规划**：页面容器 `*-page`、卡片 `card-*`、交互按钮 `add-plant-*/add-hardscape-*/add-fish/inc-*/dec-*`、结果区 `ro-result/salt-result/bps/target-ph/light-warnings/issue-*/density-card/care-card`、画布元素 `item-{id}`、开缸日程 `week-{n}/step-{id}/milestones-{n}/reading-{ph|nh3}-{n}/{ph|nh3}-check-{n}/start-date/startup-*`。新页面照此命名，E2E 才能稳定定位。
 2. **随机测试必须固定种子**：用 `mulberry32(seed)`，保证失败可复现。
 3. **手工核算独立于被测代码**：单测内的期望值用内联算式另算一遍（禁止 import 被测函数自身），才满足"误差 ≤2% 对照"的意义。
 4. **组件测试间状态隔离**：store 是模块级单例，测试用公开 API `getPlans()/deletePlan()` 清场，而非访问内部变量。

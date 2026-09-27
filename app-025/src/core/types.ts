@@ -57,6 +57,41 @@ export type WaterConfig = {
   targetTempC: number;
 };
 
+// ---- 开缸日程（开缸 → 水质稳定 的按周计划）----
+
+export type StepKind = 'water' | 'light' | 'co2' | 'fish' | 'shrimp' | 'maintain';
+
+export type ScheduleStep = {
+  /** 稳定 id：常规步骤 w{周}-{kind}；里程碑 milestone-{kind}（重排跨周移动时勾选状态不丢） */
+  id: string;
+  kind: StepKind;
+  title: string; // 这一步做什么（含量）
+  reason: string; // 理由
+  observe: string; // 能观察到的现象
+  milestone: boolean; // 一次性步骤（下鱼 / 放虾螺）
+};
+
+export type WeekPlan = {
+  week: number; // 第几周（1 起）
+  waterChangePct: number; // 每次换水 %
+  waterChangeTimes: number; // 本周换水次数
+  lightHours: number; // 每天光照小时（0 = 无需固定光照）
+  co2: 'none' | 'start' | 'ramp' | 'full'; // CO₂ 阶段：不开 / 起步低量 / 加量 / 满量
+  effectiveL: number; // 生成该周时的有效水量 L（换水升数折算依据，锁定后随快照冻结）
+  co2Bps: number; // 生成该周时的目标泡/秒（经验估算，锁定后随快照冻结）
+  steps: ScheduleStep[];
+  phRange: [number, number]; // 本周 pH 合理范围（实测校验用）
+  nh3Max: number; // 本周氨氮上限 mg/L（实测校验用）
+};
+
+/** 开缸日程的执行状态（挂在 Plan 上持久化） */
+export type StartupState = {
+  startDate: string; // 开缸日期 YYYY-MM-DD
+  lockedWeeks: WeekPlan[]; // 已过去周的快照：中途改参数重排时不动这些周
+  done: Record<string, boolean>; // stepId -> 已完成
+  readings: Record<number, { ph?: number; nh3?: number }>; // 周 -> 当天实测（pH / 氨氮 mg/L）
+};
+
 export type Plan = {
   id: string;
   name: string;
@@ -65,6 +100,7 @@ export type Plan = {
   items: Item[];
   fishes: { fishId: string; count: number }[];
   water: WaterConfig;
+  startup?: StartupState; // 开缸日程（首次进入日程页时初始化，旧数据可缺省）
   updatedAt: number;
 };
 

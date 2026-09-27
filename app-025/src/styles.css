@@ -226,6 +226,47 @@ label.chk {
   border-radius: 6px;
   font-size: 13px;
 }
+.dangerbox {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #fdeceb;
+  border: 1px solid #f0b9b3;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--danger);
+}
+/* 开缸日程表 */
+.startup-table td {
+  vertical-align: top;
+}
+.startup-table tr.current td {
+  background: #f2fbfb;
+}
+.tag.current {
+  background: var(--primary);
+  color: #fff;
+}
+.step {
+  padding: 5px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.step:last-child {
+  border-bottom: none;
+}
+.step-done {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.reading-inputs {
+  display: flex;
+  gap: 8px;
+}
+.reading-inputs label {
+  flex: 1;
+}
+.reading-inputs input {
+  width: 72px;
+}
 .issue {
   padding: 6px 10px;
   margin: 6px 0;

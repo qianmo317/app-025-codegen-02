@@ -6,6 +6,7 @@ import { useEffect, useState, type ReactNode } from 'react';
  * #/plan/:id        造景编辑器
  * #/plan/:id/water  水质与设备
  * #/plan/:id/stocking 生物兼容
+ * #/plan/:id/startup 开缸日程
  * #/plan/:id/bom    物料清单
  * #/library         素材库
  */
@@ -15,6 +16,7 @@ export type Route =
   | { name: 'editor'; id: string }
   | { name: 'water'; id: string }
   | { name: 'stocking'; id: string }
+  | { name: 'startup'; id: string }
   | { name: 'bom'; id: string }
   | { name: 'library' };
 
@@ -25,6 +27,7 @@ export function parseHash(hash: string): Route {
     const id = seg[1];
     if (seg[2] === 'water') return { name: 'water', id };
     if (seg[2] === 'stocking') return { name: 'stocking', id };
+    if (seg[2] === 'startup') return { name: 'startup', id };
     if (seg[2] === 'bom') return { name: 'bom', id };
     return { name: 'editor', id };
   }

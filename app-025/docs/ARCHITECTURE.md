@@ -6,20 +6,20 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  页面层 pages/（PlanList · Editor · Water · Stocking · Bom · Library）
+│  页面层 pages/（PlanList · Editor · Water · Stocking · Startup · Bom · Library）
 │  只做：展示计算结果 + 收集用户动作；不写业务公式
 ├─────────────────────────────────────────────────────────────┤
 │  组件层 components/Canvas.tsx
 │  SVG 画布：平面/侧视双视图、网格、辅助线、Pointer 拖拽、遮挡检查
 ├─────────────────────────────────────────────────────────────┤
 │  路由层 router.tsx（内置 hash 路由，零依赖）
-│  #/ /plan/:id[/water|/stocking|/bom] /library
+│  #/ /plan/:id[/water|/stocking|/startup|/bom] /library
 ├─────────────────────────────────────────────────────────────┤
 │  核心计算层 core/（纯函数，"后端"逻辑，全部可单测）
-│  volume.ts · water.ts · equipment.ts · compatibility.ts · bom.ts · types.ts
+│  volume.ts · water.ts · equipment.ts · compatibility.ts · schedule.ts · bom.ts · types.ts
 ├─────────────────────────────────────────────────────────────┤
 │  状态层 state/plans.ts（集中式 store，观察者模式）
-│  方案 CRUD + localStorage 持久化（键 aquaplans.v1）
+│  方案 CRUD + 开缸日程状态（勾选/实测/锁定周）+ localStorage 持久化（键 aquaplans.v1）
 ├─────────────────────────────────────────────────────────────┤
 │  数据层 data/*.json（随包发布，构建时打包）
 │  plants.json(12) · fishes.json(26) · hardscape.json(6) · substrates.json(4)
@@ -39,6 +39,7 @@
 
 ```
 用户动作 ──▶ upsertPlan / updatePlan / deletePlan / renamePlan / updateWater
+             updateStartup / toggleStartupStep / setStartupReading / lockStartupWeeks / resetStartup
                 │
                 ├─▶ plans: Plan[]（模块级内存单例）
                 ├─▶ emit() → localStorage.setItem('aquaplans.v1', JSON.stringify(plans))
@@ -65,6 +66,7 @@ App.tsx: useSyncExternalStore(subscribePlans, getPlans) ──▶ 触发重渲�
 | `{ name: 'editor', id }` | Editor |
 | `{ name: 'water', id }` | Water |
 | `{ name: 'stocking', id }` | Stocking |
+| `{ name: 'startup', id }` | Startup |
 | `{ name: 'bom', id }` | Bom |
 | `{ name: 'library' }` | Library |
 
@@ -88,6 +90,7 @@ App.tsx: useSyncExternalStore(subscribePlans, getPlans) ──▶ 触发重渲�
 | water.ts | `weeklyWaterChangePct` `roMixForGh` `saltForGh` `co2FromPhKh` `targetPhForCo2` `co2BubblesPerSec` `phKhCo2Table` `co2Lookup` | RO 兑水与矿物盐互斥输出；CO₂ ≈ 3×KH×10^(7−pH)；泡/秒估算强制 `estimated` 标注 |
 | equipment.ts | `classifyLightByLumen` `recommendLumens` `recommendWatts` `checkLight` `filterFlowLph` `heaterWatts` `suggestGlassMm` `equipmentSummary` | 光照三档判定 + 水草需求交叉校验；过滤 5~8 倍；加热 W = L×ΔT×0.12 |
 | compatibility.ts | `rangesOverlap` `checkPair` `checkSchooling` `checkTankSize` `checkDensity` `checkStocking` | 逐对 5 条规则 + 附加规则，输出 `StockingIssue[]`（severity/conflict·warning·info + code + message） |
+| schedule.ts | `profileFromPlan` `buildSchedule` `totalWeeks` `fishWeek` `shrimpWeek` `co2StageOf` `lightHoursOf` `waterChangeOf` `nh3MaxOf` `phRangeOf` `currentWeek` `weekDateRange` `mergeWithLocked` `weeksToLock` `checkReading` | 开缸日程：画像（水量/密度/泥/快慢生草）→ 按周换水/光照/CO₂/下生物；已过去周快照锁定，改参数只重排未来周；pH/氨氮实测超范围提醒 |
 | bom.ts | `buildBom` | 汇总底砂/水草/硬景观/生物/设备行 + 养护参数卡 |
 
 可配参数集中以常量或数据表存在（`GH_SALTS`、`LIGHT_LUMEN_PER_M2`、`WL_RANGE`、底砂密度表、硬景观排水系数），便于调参与测试边界。
@@ -118,4 +121,5 @@ App.tsx: useSyncExternalStore(subscribePlans, getPlans) ──▶ 触发重渲�
 | 状态集中一个 store，而非每页独立 state | 方案数据跨 5 个页面共享（缸体改动要实时反映到水质/兼容/清单页），且用户要求状态逻辑集中、组件只做展示 |
 | 有效水量强制扣除底砂与素材 | 商家/新手按毛水量配药施肥剂量偏高的真实痛点，验收明确要求专门用例 |
 | 估算类输出统一 `Estimate` 类型 | 水族经验值差异大，必须让用户知道哪些是精确公式、哪些需要实测校验（如 CO₂ 用监测液） |
+| 开缸日程已过去周存快照（lockedWeeks） | 中途改缸体/水草时只重排未开始的周；快照携带生成时的有效水量与泡速（effectiveL/co2Bps），锁定周的换水升数不随改缸变化；里程碑步骤 id 与周次解耦（milestone-fish/shrimp），跨重排保留勾选 |
 | 素材画布 SVG 而非 Canvas 2D | 素材数量级小（几十个节点），SVG 可直接绑定 DOM 事件（拖拽/选中），无需手写命中检测，且导出平面图可复用同一坐标模型 |

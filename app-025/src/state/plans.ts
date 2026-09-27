@@ -1,4 +1,4 @@
-import type { Plan, Tank, Substrate, WaterConfig } from '../core/types';
+import type { Plan, Tank, Substrate, WaterConfig, StartupState, WeekPlan } from '../core/types';
 import { EMPTY_WATER } from '../core/types';
 
 const KEY = 'aquaplans.v1';
@@ -91,4 +91,65 @@ export function updateWater(id: string, patch: Partial<WaterConfig>) {
   const plan = getPlan(id);
   if (!plan) return;
   updatePlan(id, { water: { ...plan.water, ...patch } });
+}
+
+// ---- 开缸日程状态（Plan.startup）----
+
+/** 本地日期 YYYY-MM-DD（与 schedule.currentWeek 的本地时区推算对齐） */
+export function todayStr(): string {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+export function defaultStartup(): StartupState {
+  return { startDate: todayStr(), lockedWeeks: [], done: {}, readings: {} };
+}
+
+/** 读取开缸日程状态；旧方案没有该字段时返回默认（不落盘，首次写入时才持久化） */
+export function getStartup(plan: Plan): StartupState {
+  return plan.startup ?? defaultStartup();
+}
+
+export function updateStartup(id: string, patch: Partial<StartupState>) {
+  const plan = getPlan(id);
+  if (!plan) return;
+  updatePlan(id, { startup: { ...getStartup(plan), ...patch } });
+}
+
+/** 勾选/取消某一步。stepId 稳定（里程碑与周次解耦），重排后勾选不丢 */
+export function toggleStartupStep(id: string, stepId: string) {
+  const plan = getPlan(id);
+  if (!plan) return;
+  const s = getStartup(plan);
+  updatePlan(id, { startup: { ...s, done: { ...s.done, [stepId]: !s.done[stepId] } } });
+}
+
+/** 记录某周当天实测（pH / 氨氮 mg/L）；value 传 null 表示清除 */
+export function setStartupReading(id: string, week: number, kind: 'ph' | 'nh3', value: number | null) {
+  const plan = getPlan(id);
+  if (!plan) return;
+  const s = getStartup(plan);
+  const entry = { ...(s.readings[week] ?? {}) };
+  if (value === null || Number.isNaN(value)) delete entry[kind];
+  else entry[kind] = value;
+  updatePlan(id, { startup: { ...s, readings: { ...s.readings, [week]: entry } } });
+}
+
+/** 把已过去的周锁定为快照（只补不覆盖，幂等）：之后改参数重排不影响这些周 */
+export function lockStartupWeeks(id: string, weeks: WeekPlan[]) {
+  const plan = getPlan(id);
+  if (!plan) return;
+  const s = getStartup(plan);
+  const missing = weeks.filter((w) => !s.lockedWeeks.some((l) => l.week === w.week));
+  if (!missing.length) return;
+  updatePlan(id, { startup: { ...s, lockedWeeks: [...s.lockedWeeks, ...missing] } });
+}
+
+/** 重置开缸日程（换缸/重开时用）：清空勾选、实测与锁定快照，开缸日期回到今天 */
+export function resetStartup(id: string) {
+  const plan = getPlan(id);
+  if (!plan) return;
+  updatePlan(id, { startup: defaultStartup() });
 }

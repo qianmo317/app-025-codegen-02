@@ -52,7 +52,13 @@ export default function Water({ plan }: { plan: Plan }) {
         </Link>
         <span className="tab active">水质与设备</span>
         <Link to={`/plan/${plan.id}/stocking`} className="tab">
-          生物兼容 →
+          生物兼容
+        </Link>
+        <Link to={`/plan/${plan.id}/startup`} className="tab">
+          开缸日程
+        </Link>
+        <Link to={`/plan/${plan.id}/bom`} className="tab">
+          物料清单 →
         </Link>
       </nav>
       <h1>水质与设备计算（{plan.name}）</h1>

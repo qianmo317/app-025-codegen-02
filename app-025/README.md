@@ -36,6 +36,7 @@
 | 水量水质 | 有效水量→每周换水建议；GH/KH 调配（RO 兑水 + 矿物盐双方案）；CO₂ 需求（泡/秒，标注经验估算）；pH-KH-CO₂ 关系表 |
 | 设备匹配 | 照明（流明/面积判定低中高光 + 水草需求交叉校验爆藻风险）、过滤（5~8 倍流量）、加热棒（按温差估算） |
 | 兼容性检查 | 逐对检查混养冲突（攻击性、体长差 3 倍、水温/GH/pH 无交集、啃草、群游不足），输出原因；密度校验（1cm/1~2L 经验值，不阻断） |
+| 开缸日程 | 开缸→稳定按周排表：每周换水量/次数、光照时长、CO₂ 阶段、下鱼与放虾螺周次，每步带理由与可观察现象；按水量/密度/泥/快慢生草分档；改参数未开始的周自动重排、已过去的周锁定；步骤可勾选，每周 pH/氨氮实测栏超范围提醒 |
 | 导出 | 造景平面图 SVG 下载（含尺寸标注）、物料清单（底砂 kg/水草株数/鱼数/设备参数）、养护参数卡（A4 打印） |
 
 ### 3.2 进阶功能
@@ -54,6 +55,7 @@
 | `#/plan/:id` | 造景编辑器（左素材库 ｜ 中缸体画布·平面/侧视切换 ｜ 右参数面板） |
 | `#/plan/:id/water` | 水质与设备计算（GH/KH、CO₂、灯、过滤、加热） |
 | `#/plan/:id/stocking` | 生物清单与兼容性检查 |
+| `#/plan/:id/startup` | 开缸日程（按周计划、勾选、实测记录与超范围提醒） |
 | `#/plan/:id/bom` | 物料清单与参数卡（可打印） |
 | `#/library` | 素材库（水草/鱼种/硬景观/底砂，搜索过滤） |
 
@@ -81,15 +83,18 @@ app-025/
 │   ├── equipment.test.ts         # 设备 10 用例
 │   ├── compatibility.test.ts     # 兼容性/密度 24 用例
 │   ├── bom.test.ts               # 物料清单 5 用例
-│   └── app.test.tsx              # 组件交互 16 用例（RTL）
+│   ├── schedule.test.ts          # 开缸日程 21 用例
+│   ├── app.test.tsx              # 组件交互 16 用例（RTL）
+│   └── startup.test.tsx          # 开缸日程页交互 6 用例（RTL）
 └── src/
     ├── main.tsx / App.tsx / router.tsx / styles.css
     ├── core/                     # 纯计算层（"后端"逻辑，全部可单测）
-    │   ├── types.ts              # 数据模型（Tank/Substrate/Item/Fish/Plan/Water）
+    │   ├── types.ts              # 数据模型（Tank/Substrate/Item/Fish/Plan/Water/WeekPlan/Startup）
     │   ├── volume.ts             # 水量与底砂
     │   ├── water.ts              # 换水/GH-KH/CO₂
     │   ├── equipment.ts          # 照明/过滤/加热
     │   ├── compatibility.ts      # 混养兼容与密度
+    │   ├── schedule.ts           # 开缸日程（按周计划/重排锁定/实测校验）
     │   └── bom.ts                # 物料清单与养护卡
     ├── data/
     │   ├── db.ts                 # 类型化数据出口
@@ -103,7 +108,7 @@ app-025/
     │   └── Canvas.tsx            # SVG 画布（平面/侧视、网格、辅助线、拖拽、遮挡检查）
     └── pages/
         ├── PlanList.tsx / Editor.tsx / Water.tsx
-        ├── Stocking.tsx / Bom.tsx / Library.tsx
+        ├── Stocking.tsx / Startup.tsx / Bom.tsx / Library.tsx
 ```
 
 ## 6. 核心算法与公式
@@ -149,6 +154,17 @@ app-025/
 
 - 小型鱼（平均成体 3cm）1cm/1L，大型鱼（10cm）1cm/2L，中间线性过渡；超标仅提示为建议。
 
+### 6.7 开缸日程（按周分档，经验阈值集中在 `core/schedule.ts` 常量区）
+
+- **画像**：密度 = 株数/有效水量（≤0.05 裸缸 / ≥0.5 密植）；泥 = soil/ada；速生 = 快生草占比 ≥50%；小缸 <40L
+- **总周数**：裸缸/泥缸 6 周，密植速生 4 周，其余 5 周
+- **换水**：泥缸前两周 50%×3 → 50%×2（泥释氨），非泥草缸 30%×2 起步，裸缸 25%×1；小缸前两周次数 +1（少量多次）
+- **光照**：首周 4h/天逐周 +1h，上限 慢生 6h / 常规 7h / 密植速生 8h；裸缸不设固定光照
+- **CO₂**：有高光草才排程；密植第 1 周低量起步（目标 1/2）→ 加量（3/4）→ 满量，泡/秒按 `co2BubblesPerSec` 折算并带估算标注
+- **下生物**：第一批鱼 密植速生第 3 周 / 常规第 4 周 / 裸缸第 5 周（小缸再缓 1 周）；虾螺在鱼之后且泥缸不早于第 5 周
+- **实测合理范围**：氨氮上限 第1/2/3 周 1.0/0.5/0.25 mg/L、下鱼后 0.05；pH 前两周 6.0~8.0、之后 6.2~7.8（泥缸下限 −0.3）
+- **重排**：已过去的周存快照（`Plan.startup.lockedWeeks`），改缸体/水草只重新生成未开始的周；里程碑步骤 id 与周次解耦，勾选状态跨重排保留
+
 ## 7. 快速开始
 
 ```bash
@@ -161,13 +177,13 @@ npm run preview    # 预览构建产物：http://localhost:4173
 
 ## 8. 测试
 
-三层测试全部通过（实测结果）：
+单元与组件测试全部通过（实测结果）；E2E 用例齐备（本仓库容器缺浏览器系统库时需在有浏览器的环境运行）：
 
 | 层级 | 框架 | 结果 | 覆盖 |
 |---|---|---|---|
-| 核心计算单测 | Vitest | **139/139 通过** | 50 组随机缸体/底砂与手工核算误差 ≤2%；20 组 GH 方向与公式；CO₂ 反解往返一致且带估算标注；24 组兼容性（攻击性×温和、体长差 5 倍、区间无交集、群游 3 尾等全部检出并给出原因）；密度超标提示不阻断；BOM 完整性 |
-| 组件交互测试 | Testing Library（含在 139 内） | 16 用例 | 方案创建、素材增删改、RO/加盐切换、兼容冲突检出、清单内容、SVG 导出 |
-| E2E | Playwright（Chromium） | preview **3/3**，容器 **4/4** | 验收主流程「设缸体→摆素材→算水质→查混养→导出清单」、方案持久化（刷新不丢）、素材库搜索、healthz |
+| 核心计算单测 | Vitest | **166/166 通过** | 50 组随机缸体/底砂与手工核算误差 ≤2%；20 组 GH 方向与公式；CO₂ 反解往返一致且带估算标注；24 组兼容性（攻击性×温和、体长差 5 倍、区间无交集、群游 3 尾等全部检出并给出原因）；密度超标提示不阻断；BOM 完整性；开缸日程 21 组（分档节奏/里程碑/日期推算/重排锁定/实测校验） |
+| 组件交互测试 | Testing Library（含在 166 内） | 22 用例 | 方案创建、素材增删改、RO/加盐切换、兼容冲突检出、清单内容、SVG 导出、日程表勾选持久化/实测提醒/改参数重排 |
+| E2E | Playwright（Chromium） | preview 4 用例 / 容器 5 用例 | 验收主流程「设缸体→摆素材→算水质→查混养→导出清单」、方案持久化（刷新不丢）、素材库搜索、开缸日程勾选与超标提醒、healthz |
 
 ```bash
 npm test                      # 单元 + 组件测试
@@ -210,7 +226,20 @@ type Plan = { id: string; name: string; tank: Tank; substrate: Substrate; items:
               fishes: { fishId: string; count: number }[];
               water: { tapGh: number; tapKh: number; targetGh: number; targetCo2Ppm: number;
                        roomTempC: number; targetTempC: number };
+              startup?: StartupState;   // 开缸日程（首次进入日程页初始化，旧数据可缺省）
               updatedAt: number };
+
+// 开缸日程
+type ScheduleStep = { id: string; kind: 'water'|'light'|'co2'|'fish'|'shrimp'|'maintain';
+                      title: string; reason: string; observe: string; milestone: boolean };
+type WeekPlan = { week: number; waterChangePct: number; waterChangeTimes: number;
+                  lightHours: number; co2: 'none'|'start'|'ramp'|'full';
+                  effectiveL: number; co2Bps: number;   // 生成时的水量/泡速，随快照冻结
+                  steps: ScheduleStep[]; phRange: [number, number]; nh3Max: number };
+type StartupState = { startDate: string;                // 开缸日期 YYYY-MM-DD
+                      lockedWeeks: WeekPlan[];          // 已过去周的快照（重排不动）
+                      done: Record<string, boolean>;    // stepId -> 已完成
+                      readings: Record<number, { ph?: number; nh3?: number }> };  // 周 -> 当天实测
 ```
 
 ## 11. 交互与视觉要点

@@ -167,6 +167,42 @@ test.describe('水族造景规划器 E2E', () => {
     expect(count).toBeLessThan(26);
   });
 
+  test('开缸日程：按周表格、勾选步骤、氨氮超标提醒、刷新持久化', async ({ page }) => {
+    await page.goto('/');
+    await page.getByTestId('new-plan-name').fill('日程E2E');
+    await page.getByTestId('create-plan').click();
+    await expect(page.getByTestId('editor')).toBeVisible();
+
+    // 从编辑器导航到开缸日程
+    await page.getByRole('link', { name: '开缸日程' }).first().click();
+    await expect(page.getByTestId('startup-page')).toBeVisible();
+    // 默认方案（泥+无草）→ 6 周表；第一周含换水步骤与理由/现象
+    await expect(page.getByTestId('week-1')).toContainText('换水 50%');
+    await expect(page.getByTestId('week-1')).toContainText('理由：');
+    await expect(page.getByTestId('week-1')).toContainText('现象：');
+    await expect(page.getByTestId('week-6')).toBeVisible();
+    // 下鱼/虾螺里程碑（裸缸：第 5 周鱼、第 6 周虾螺）
+    await expect(page.getByTestId('milestones-5')).toContainText('第一批鱼');
+    await expect(page.getByTestId('milestones-6')).toContainText('虾、螺');
+
+    // 勾选第一步
+    await page.getByTestId('step-w1-water').check();
+    await expect(page.getByTestId('step-w1-water')).toBeChecked();
+
+    // 录入氨氮超标（第 1 周上限 1.0 mg/L）→ 出现提醒
+    await page.getByTestId('reading-nh3-1').fill('2.5');
+    await expect(page.getByTestId('nh3-check-1')).toContainText('超标');
+    // pH 在范围内 → 正常提示
+    await page.getByTestId('reading-ph-1').fill('6.8');
+    await expect(page.getByTestId('ph-check-1')).toContainText('在本周合理范围');
+
+    // 刷新后勾选与实测仍在（localStorage 持久化）
+    await page.reload();
+    await expect(page.getByTestId('startup-page')).toBeVisible();
+    await expect(page.getByTestId('step-w1-water')).toBeChecked();
+    await expect(page.getByTestId('reading-nh3-1')).toHaveValue('2.5');
+  });
+
   test('healthz 由 nginx 提供（Docker 场景断言，preview 下跳过）', async ({ page, baseURL }) => {
     test.skip(!baseURL!.includes(':8105'), '仅在 Docker 容器场景运行');
     const res = await page.request.get('/healthz');
